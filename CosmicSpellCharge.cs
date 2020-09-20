@@ -8,8 +8,8 @@ using ThunderRoad;
 using System.Reflection;
 using System.Collections;
 
-namespace BlackHoleSpell {
-    public class BlackHoleCharge : SpellCastCharge {
+namespace CosmicSpell {
+    public class CosmicSpellCharge : SpellCastCharge {
         private bool isActive;
 
         private float attractRadius = 10.0f;
@@ -34,7 +34,16 @@ namespace BlackHoleSpell {
             base.OnImbueCollisionStart(ref collisionInstance);
             var contactPoint = collisionInstance.contactPoint;
             var sourceItem = collisionInstance.sourceColliderGroup.collisionHandler.item;
-            foreach (Item item in Item.list.Where(i => i != sourceItem && Vector3.Distance(contactPoint, i.transform.position) < imbueAttractRadius)) {
+            foreach (Item item in Item.list.Where(
+                i => i != sourceItem
+                     && Vector3.Distance(contactPoint, i.transform.position) < imbueAttractRadius
+                     && i.data.type != ItemPhysic.Type.Body
+                     && !i.isGripped
+                     && i.handlers.Count() == 0
+                     && (i.lastHandler == null || !i.lastHandler.isHandlingSameObject)
+                     && i.holder == null
+                     && !i.rb.isKinematic
+                     && !i.isTelekinesisGrabbed)) {
                 collisionInstance.sourceColliderGroup.imbue.energy = 0.0f;
                 Creature.player.mana.StartCoroutine(ImbueDaggerAttractCoroutine(item, contactPoint));
             }
@@ -46,7 +55,7 @@ namespace BlackHoleSpell {
             item.rb.AddForce(Vector3.up * 0.5f, ForceMode.Impulse);
             yield return new WaitForSeconds(1f);
             item.rb.useGravity = wasUsingGravity;
-            item.rb.AddForce((target - item.transform.position).normalized * 10.0f, ForceMode.Impulse);
+            item.rb.AddForce((target - item.transform.position).normalized * 10.0f * item.rb.mass / 2.0f, ForceMode.Impulse);
             item.Throw();
         }
 
@@ -75,13 +84,13 @@ namespace BlackHoleSpell {
             if (list == null || list.Count() == 0)
                 return;
             var itemsToChange = list?.Where(
-                item => item?.imbues?
+                item => item.imbues == null || item.imbues.Count() == 0 || item.imbues?
                     .Find(imbue => imbue?.spellCastBase?.id != "Gravity" || imbue?.energy == 0))?
                 .Where(item => item.rb.useGravity != gravity);
             if (itemsToChange != null)
-                //Debug.Log($"usegravity = {gravity} for {itemsToChange.Count()} items");
                 foreach (var item in itemsToChange) {
-                    item.rb.useGravity = gravity;
+                    if (!(item.data.id.Equals("CosmicSun") && gravity == true))
+                        item.rb.useGravity = gravity;
                 }
         }
 
@@ -95,8 +104,11 @@ namespace BlackHoleSpell {
                     item => Vector3.Distance(item.transform.position, spellCaster.magicSource.position) < attractRadius
                             && item.data.type != ItemPhysic.Type.Body
                             && !item.isGripped
+                            && item.handlers.Count() == 0
+                            && (item.lastHandler == null || !item.lastHandler.isHandlingSameObject)
+                            && item.holder == null
+                            && !item.rb.isKinematic
                             && !item.isTelekinesisGrabbed).ToList();
-                //Debug.Log($"{previousItems.Where(item => !items.Contains(item)).Count()} items in prev list");
                 ToggleGravity(previousItems.Where(item => !items.Contains(item)), true);
                 previousItems = new List<Item>(items);
                 foreach (Item item in items) {
@@ -104,8 +116,14 @@ namespace BlackHoleSpell {
                     if (isGripping) {
                         target = Vector3.Lerp(target, spellCaster.magicSource.position + spellCaster.magicSource.up, Time.deltaTime * 10.0f);
                         Vector3 forceDirection = target - item.transform.position;
-                        item.rb.AddForce(forceDirection.normalized * 70.0f);
-                        item.rb.AddForce(-forceDirection.normalized * (float)(2.0f / Math.Pow(forceDirection.magnitude, 2.0f)));
+                        if (item.data.type == ItemPhysic.Type.Weapon
+                            || item.data.type == ItemPhysic.Type.Shield) {
+                            item.rb.AddForce(forceDirection.normalized * 70.0f);
+                            item.rb.AddForce(-forceDirection.normalized * (float)(2.0f / Math.Pow(forceDirection.magnitude, 2.0f)));
+                        } else {
+                            item.rb.AddForce(forceDirection.normalized * item.rb.mass / 2.0f * 70.0f);
+                            item.rb.AddForce(-forceDirection.normalized * item.rb.mass / 2.0f * (float)(2.0f / Math.Pow(forceDirection.magnitude, 2.0f)));
+                        }
                         if (forceDirection.magnitude < 1.0f) {
                             item.rb.velocity *= 0.9f;
                         }
@@ -129,7 +147,12 @@ namespace BlackHoleSpell {
             ToggleGravity(items, true);
             foreach (Item item in items) {
                 item.rb.velocity = Vector3.zero;
-                item.rb.AddForce(velocity * 5.0f, ForceMode.Impulse);
+                if (item.data.type == ItemPhysic.Type.Weapon
+                    || item.data.type == ItemPhysic.Type.Shield) {
+                    item.rb.AddForce(velocity * 5.0f, ForceMode.Impulse);
+                } else {
+                    item.rb.AddForce(velocity * 5.0f * item.rb.mass / 2.0f, ForceMode.Impulse);
+                }
                 item.Throw();
             }
         }

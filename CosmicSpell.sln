@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.30204.135
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BlackHoleSpell", "BlackHoleSpell.csproj", "{452FC846-49A0-4D20-959C-B291B89F9F85}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CosmicSpell", "CosmicSpell.csproj", "{F3F580C0-D1D0-49DA-9E4D-8EBACD26A3A6}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -11,10 +11,10 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{452FC846-49A0-4D20-959C-B291B89F9F85}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{452FC846-49A0-4D20-959C-B291B89F9F85}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{452FC846-49A0-4D20-959C-B291B89F9F85}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{452FC846-49A0-4D20-959C-B291B89F9F85}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F3F580C0-D1D0-49DA-9E4D-8EBACD26A3A6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F3F580C0-D1D0-49DA-9E4D-8EBACD26A3A6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F3F580C0-D1D0-49DA-9E4D-8EBACD26A3A6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F3F580C0-D1D0-49DA-9E4D-8EBACD26A3A6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

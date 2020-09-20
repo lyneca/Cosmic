@@ -8,14 +8,12 @@ using ThunderRoad;
 using System.Collections;
 using System.Reflection;
 
-namespace BlackHoleSpell {
-    class BlackHoleFireMerge : SpellMergeData {
+namespace CosmicSpell {
+    class CosmicFireMerge : SpellMergeData {
         private ItemPhysic sunData;
         private Item sunInstance;
         private bool isActive;
-        private float lastFireballFired;
-        private float fireballDelay = 1.0f;
-        private ItemPhysic fireballItem;
+        public ItemPhysic fireballItem;
         private EffectData fireballEffect;
         private EffectData fireballDeflectEffect;
         private DamagerData fireballDamager;
@@ -24,7 +22,7 @@ namespace BlackHoleSpell {
         public override void OnCatalogRefresh() {
             base.OnCatalogRefresh();
             AssetBundle assetBundle = AssetBundle.GetAllLoadedAssetBundles().Where(bundle => bundle.name.Contains("blackholespell")).First();
-            sunData = Catalog.GetData<ItemPhysic>("BlackHoleSun");
+            sunData = Catalog.GetData<ItemPhysic>("CosmicSun");
             fireballItem = Catalog.GetData<ItemPhysic>("DynamicProjectile");
             fireballEffect = Catalog.GetData<EffectData>("SpellFireball");
             fireballDeflectEffect = Catalog.GetData<EffectData>("SpellFireBallHitBlade");
@@ -39,24 +37,32 @@ namespace BlackHoleSpell {
                     sunInstance = sunData.Spawn();
                     sunInstance.transform.position = Creature.player.mana.mergePoint.transform.position;
                     sunInstance.transform.rotation = Creature.player.mana.mergePoint.transform.rotation;
+                    sunInstance.rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
                     sunInstance.rb.isKinematic = true;
+                    SunController control = sunInstance.GetComponent<SunController>();
+                    control.mergeSpell = this;
                 }
             } else {
                 isActive = false;
                 Vector3 velocity = Player.local.transform.rotation * PlayerControl.GetHand(GameManager.options.twoHandedDominantHand).GetHandVelocity();
-                if ((velocity.magnitude > SpellCaster.throwMinHandVelocity || currentCharge == 1)) {
+                if ((velocity.magnitude > SpellCaster.throwMinHandVelocity && currentCharge == 1)) {
                     Throw(velocity);
                 } else if (sunInstance != null) {
-                    sunInstance.Despawn();
+                    sunInstance.GetComponent<SunController>().Despawn();
                     sunInstance = null;
                 }
             }
         }
 
         public void Throw(Vector3 velocity) {
+            SunController control = sunInstance.GetComponent<SunController>();
+            if (control != null) {
+                control.active = true;
+                control.numFireballs = sunExplodeNumFireballs;
+            }
             sunInstance.rb.isKinematic = false;
             sunInstance.rb.useGravity = true;
-            sunInstance.rb.AddForce(velocity * 2.0f, ForceMode.Impulse);
+            sunInstance.rb.AddForce(velocity * 5.0f, ForceMode.Impulse);
             sunInstance.Throw();
         }
 
@@ -82,10 +88,6 @@ namespace BlackHoleSpell {
                     Time.deltaTime * 10.0f);
                 sunInstance.transform.rotation *= Quaternion.Euler(0, 1.0f, 0);
                 sunInstance.transform.localScale = Vector3.one * currentCharge / 3.0f;
-                if (Time.time - lastFireballFired > fireballDelay) {
-                    lastFireballFired = Time.time;
-                    Creature.player.StartCoroutine(SpawnFireball(sunInstance.transform));
-                }
             }
         }
 
@@ -118,7 +120,7 @@ namespace BlackHoleSpell {
             ThrowFireball(fireball, (GetClosestCreatureHead(fireball) - fireball.transform.position).normalized * 30.0f);
         }
 
-        IEnumerator SpawnFireball(Transform sun, Vector3 velocity) {
+        public IEnumerator SpawnFireball(Transform sun, Vector3 velocity) {
             var offset = Quaternion.Euler(
                 UnityEngine.Random.value * 360.0f,
                 UnityEngine.Random.value * 360.0f,
@@ -131,7 +133,7 @@ namespace BlackHoleSpell {
             yield break;
         }
 
-        IEnumerator SpawnFireball(Transform sun) {
+        public IEnumerator SpawnFireball(Transform sun, Collider[] ignoredColliders) {
             // does it show that I didn't google how to do C# default args...
             float chargeTime = 0;
             var offset = Quaternion.Euler(
@@ -142,6 +144,11 @@ namespace BlackHoleSpell {
             fireball.transform.position = sun.position + offset;
             fireball.transform.localScale = Vector3.zero;
             fireball.rb.isKinematic = true;
+            foreach (Collider collider in ignoredColliders) {
+                foreach (Collider fireballCollider in fireball.GetComponentsInChildren<Collider>()) {
+                    Physics.IgnoreCollision(collider, fireballCollider);
+                }
+            }
             while (true) {
                 if (chargeTime < 1 && sun != null) {
                     chargeTime += Time.deltaTime / 2.0f;
@@ -155,20 +162,6 @@ namespace BlackHoleSpell {
                     ThrowFireballAtClosestEnemy(fireball);
                     yield break;
                 }
-            }
-        }
-
-        public class SunProjectile : MonoBehaviour {
-            BlackHoleFireMerge spellMerge;
-            public void SetSpell(BlackHoleFireMerge spellMerge) {
-                this.spellMerge = spellMerge;
-            }
-
-            private void OnCollisionEnter(Collision collision) {
-                for (int i = 0; i < spellMerge.sunExplodeNumFireballs; i++) {
-                    Creature.player.StartCoroutine(spellMerge.SpawnFireball(transform, new Vector3(UnityEngine.Random.value * 2.0f, 3.0f, UnityEngine.Random.value * 2.0f)));
-                }
-                Destroy(this);
             }
         }
     }
