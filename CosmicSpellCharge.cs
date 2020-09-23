@@ -44,9 +44,30 @@ namespace CosmicSpell {
                      && i.holder == null
                      && !i.rb.isKinematic
                      && !i.isTelekinesisGrabbed)) {
-                collisionInstance.sourceColliderGroup.imbue.energy = 0.0f;
-                Creature.player.mana.StartCoroutine(ImbueDaggerAttractCoroutine(item, contactPoint));
+                if (collisionInstance.sourceColliderGroup.imbue)
+                    collisionInstance.sourceColliderGroup.imbue.energy = 0.0f;
+                if (collisionInstance.targetColliderGroup?.collisionHandler != null && collisionInstance.targetColliderGroup.collisionHandler.isRagdollPart) {
+                    Creature.player.mana.StartCoroutine(ImbueDaggerAttractCoroutine(item, collisionInstance.targetCollider.transform));
+                } else {
+                    Creature.player.mana.StartCoroutine(ImbueDaggerAttractCoroutine(item, contactPoint));
+                }
             }
+        }
+        private void PointItemFlyRefAtTarget(Item item, Vector3 target, float lerpFactor) {
+            item.transform.rotation = Quaternion.Slerp(
+                item.transform.rotation * item.definition.flyDirRef.localRotation,
+                Quaternion.LookRotation(target),
+                lerpFactor) * Quaternion.Inverse(item.definition.flyDirRef.localRotation);
+        }
+
+        IEnumerator ImbueDaggerAttractCoroutine(Item item, Transform target) {
+            bool wasUsingGravity = item.rb.useGravity;
+            item.rb.useGravity = false;
+            item.rb.AddForce(Vector3.up * 0.5f, ForceMode.Impulse);
+            yield return new WaitForSeconds(1f);
+            item.rb.useGravity = wasUsingGravity;
+            item.rb.AddForce((target.transform.position - item.transform.position).normalized * 30.0f * item.rb.mass / 2.0f, ForceMode.Impulse);
+            item.Throw();
         }
 
         IEnumerator ImbueDaggerAttractCoroutine(Item item, Vector3 target) {
@@ -55,7 +76,7 @@ namespace CosmicSpell {
             item.rb.AddForce(Vector3.up * 0.5f, ForceMode.Impulse);
             yield return new WaitForSeconds(1f);
             item.rb.useGravity = wasUsingGravity;
-            item.rb.AddForce((target - item.transform.position).normalized * 10.0f * item.rb.mass / 2.0f, ForceMode.Impulse);
+            item.rb.AddForce((target - item.transform.position).normalized * 30.0f * item.rb.mass / 2.0f, ForceMode.Impulse);
             item.Throw();
         }
 
