@@ -13,6 +13,9 @@ namespace CosmicSpell {
         private TextMesh text;
         private EffectData ringEffectData;
         private EffectInstance ringEffect;
+
+        public float maxGravityForce = 2.0f;
+
         public override void OnCatalogRefresh() {
             base.OnCatalogRefresh();
             textObject = new GameObject();
@@ -27,15 +30,28 @@ namespace CosmicSpell {
         }
 
         private static Quaternion GetHandsPointingQuaternion() {
-            if (PlayerControl.handLeft.gripPressed && PlayerControl.handRight.gripPressed) {
-                return Quaternion.LookRotation(Vector3.down);
-            } else { 
-            return Quaternion.Slerp(
+            var lookDirection = Quaternion.Slerp(
                 Quaternion.LookRotation(Creature.player.animator.GetBoneTransform(HumanBodyBones.RightHand).transform.right * -1.0f),
                 Quaternion.LookRotation(Creature.player.animator.GetBoneTransform(HumanBodyBones.LeftHand).transform.right * -1.0f),
                 0.5f
             );
-}
+            if (PlayerControl.handLeft.gripPressed && PlayerControl.handRight.gripPressed) {
+                var angleDown = Quaternion.Angle(lookDirection, Quaternion.LookRotation(Vector3.down));
+                var angleUp = Quaternion.Angle(lookDirection, Quaternion.LookRotation(Vector3.up));
+                if (angleUp < angleDown) {
+                    return Quaternion.LookRotation(Vector3.up);
+                } else {
+                    return Quaternion.LookRotation(Vector3.down);
+                }
+            } else {
+                return lookDirection;
+            }
+        }
+
+        public static Quaternion FlattenQuaternion(Quaternion quat) {
+            var transformed = quat * Vector3.forward;
+            return Quaternion.LookRotation(transformed - Vector3.Dot(transformed, Vector3.up) * Vector3.up).normalized;
+
         }
 
         private float GetHandDistanceInGs() {
@@ -46,7 +62,7 @@ namespace CosmicSpell {
                     Vector3.Distance(
                         Creature.player.body.handLeft.transform.position,
                         Creature.player.body.handRight.transform.position) - 0.3f,
-                    0f, 1f) * 2.0f;
+                    0f, maxGravityForce / 2.0f) * 2.0f;
             }
         }
 
@@ -62,7 +78,9 @@ namespace CosmicSpell {
                 ringEffect.Stop();
                 ringEffect.Despawn();
                 textObject.SetActive(false);
-                Physics.gravity = GetHandsPointingQuaternion() * Vector3.forward * 9.8f * GetHandDistanceInGs();
+                if (currentCharge == 1) {
+                    Physics.gravity = GetHandsPointingQuaternion() * Vector3.forward * 9.8f * GetHandDistanceInGs();
+                }
             }
         }
 
@@ -71,12 +89,13 @@ namespace CosmicSpell {
             if (effectShown) {
                 textObject.SetActive(true);
                 ringEffect.SetSpeed(GetHandDistanceInGs());
+                ringEffect.SetIntensity(GetHandDistanceInGs());
                 Creature.player.mana.mergePoint.transform.rotation = GetHandsPointingQuaternion();
                 text.text = $"{Math.Round(GetHandDistanceInGs(), 1)}G";
                 textObject.transform.position = Vector3.Lerp(
                     textObject.transform.position,
                     Creature.player.mana.mergePoint.transform.position + new Vector3(0, 0.2f, 0),
-                    Time.deltaTime * 10.0f);
+                    Time.deltaTime * 50.0f);
                 textObject.transform.rotation = Quaternion.LookRotation(textObject.transform.position - Creature.player.animator.GetBoneTransform(HumanBodyBones.Head).position);
             } else {
                 textObject.SetActive(false);

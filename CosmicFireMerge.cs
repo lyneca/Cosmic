@@ -17,7 +17,12 @@ namespace CosmicSpell {
         private EffectData fireballEffect;
         private EffectData fireballDeflectEffect;
         private DamagerData fireballDamager;
-        private int sunExplodeNumFireballs = 10;
+
+        public int sunNumFireballs = 10;
+        public float sunFireballDelay = 1.0f;
+        public float throwVelocity = 5.0f;
+        public float fireballSpeed = 50.0f;
+        public float fireballChargeSpeed = 2.0f;
 
         public override void OnCatalogRefresh() {
             base.OnCatalogRefresh();
@@ -45,7 +50,7 @@ namespace CosmicSpell {
             } else {
                 isActive = false;
                 Vector3 velocity = Player.local.transform.rotation * PlayerControl.GetHand(GameManager.options.twoHandedDominantHand).GetHandVelocity();
-                if ((velocity.magnitude > SpellCaster.throwMinHandVelocity && currentCharge == 1)) {
+                if (currentCharge == 1) {
                     Throw(velocity);
                 } else if (sunInstance != null) {
                     sunInstance.GetComponent<SunController>().Despawn();
@@ -58,11 +63,12 @@ namespace CosmicSpell {
             SunController control = sunInstance.GetComponent<SunController>();
             if (control != null) {
                 control.active = true;
-                control.numFireballs = sunExplodeNumFireballs;
+                control.numFireballs = sunNumFireballs;
+                control.fireballDelay = sunFireballDelay;
             }
             sunInstance.rb.isKinematic = false;
             sunInstance.rb.useGravity = true;
-            sunInstance.rb.AddForce(velocity * 5.0f, ForceMode.Impulse);
+            sunInstance.rb.AddForce(velocity * throwVelocity, ForceMode.Impulse);
             sunInstance.Throw();
         }
 
@@ -103,7 +109,7 @@ namespace CosmicSpell {
             ItemMagicProjectile component = fireball.GetComponent<ItemMagicProjectile>();
             if ((bool)(UnityEngine.Object)component) {
                 component.guided = false;
-                component.speed = 50.0f;
+                component.speed = fireballSpeed;
                 component.item.lastHandler = Creature.player.body.handRight.interactor;
                 component.allowDeflect = true;
                 component.deflectEffectData = fireballDeflectEffect;
@@ -151,7 +157,7 @@ namespace CosmicSpell {
             }
             while (true) {
                 if (chargeTime < 1 && sun != null) {
-                    chargeTime += Time.deltaTime / 2.0f;
+                    chargeTime += Time.deltaTime / fireballChargeSpeed;
                     fireball.transform.localScale = Vector3.one * chargeTime;
                     fireball.transform.position = Vector3.Lerp(
                         fireball.transform.position,

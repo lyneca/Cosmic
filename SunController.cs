@@ -18,8 +18,9 @@ namespace CosmicSpell {
         protected Item item;
         public CosmicFireMerge mergeSpell;
         public int numFireballs = 10;
+        public float fireballDelay = 1.0f;
+
         private float lastFireballFired = 0;
-        private float fireballDelay = 1.0f;
         public bool awake = false;
         public bool active = false;
 
