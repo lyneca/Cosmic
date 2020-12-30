@@ -11,8 +11,8 @@ namespace CosmicSpell {
         public float radius = 10.0f;
         EffectData imbueRagdollEffect;
 
-        public override void OnCatalogRefresh() {
-            base.OnCatalogRefresh();
+        public override void Load(Mana mana) {
+            base.Load(mana);
             imbueRagdollEffect = Catalog.GetData<EffectData>("ImbueLightningRagdoll");
         }
 
@@ -27,33 +27,40 @@ namespace CosmicSpell {
             }
         }
 
+        public override void Update() {
+            base.Update();
+            if (currentCharge > 0) {
+                chargeEffect?.SetSource(mana.mergePoint);
+            }
+        }
+
         public void DisarmEveryoneLmao() {
-            SpellCastData lightningData = Creature.player.mana.casterLeft.spellInstance is SpellCastLightning
-                ? Creature.player.mana.casterLeft.spellInstance
-                : Creature.player.mana.casterRight.spellInstance;
+            SpellCastData lightningData = Player.currentCreature.mana.casterLeft.spellInstance is SpellCastLightning
+                ? Player.currentCreature.mana.casterLeft.spellInstance
+                : Player.currentCreature.mana.casterRight.spellInstance;
             if (lightningData is SpellCastLightning cast) {
                 // modified from ThunderRoad source code for Gravity crystal slam
                 List<Creature> pushedCreatures = new List<Creature>();
-                foreach (Collider collider in Physics.OverlapSphere(Creature.player.mana.mergePoint.position, radius)
+                foreach (Collider collider in Physics.OverlapSphere(Player.currentCreature.mana.mergePoint.position, radius)
                     .Where(c =>
                         c.attachedRigidbody
                         && c.attachedRigidbody
                         && !c.attachedRigidbody.isKinematic)) {
                     if (collider.attachedRigidbody.gameObject.layer == GameManager.GetLayer(LayerName.NPC) || collider.attachedRigidbody.gameObject.layer == GameManager.GetLayer(LayerName.Ragdoll)) {
                         RagdollPart component = collider.attachedRigidbody.gameObject.GetComponent<RagdollPart>();
-                        if (component.ragdoll.creature == Creature.player)
+                        if (component.ragdoll.creature == Player.currentCreature)
                             continue;
                         if (component && !pushedCreatures.Contains(component.ragdoll.creature)) {
                             // do it again, just in case lmao
                             pushedCreatures.Add(component.ragdoll.creature);
-                            component.ragdoll.creature.body.handLeft.interactor.TryRelease();
-                            component.ragdoll.creature.body.handRight.interactor.TryRelease();
-                            ActionShock action = component.ragdoll.creature.GetAction<ActionShock>();
+                            component.ragdoll.creature.handLeft.TryRelease();
+                            component.ragdoll.creature.handRight.TryRelease();
+                            ActionShock action = component.ragdoll.creature.brain.GetAction<ActionShock>();
                             if (action != null) {
                                 action.Refresh(0.5f, cast.boltShockDuration);
                             } else {
                                 ActionShock actionShock = new ActionShock(0.5f, cast.boltShockDuration, imbueRagdollEffect);
-                                component.ragdoll.creature.TryAction(actionShock, true);
+                                component.ragdoll.creature.brain.TryAction(actionShock, true);
                             }
                         }
                     }

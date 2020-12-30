@@ -7,6 +7,7 @@ using ThunderRoad;
 using UnityEngine;
 
 namespace CosmicSpell {
+    using Utils.ExtensionMethods;
     class SunControllerModule : ItemModule {
         public override void OnItemLoaded(Item item) {
             base.OnItemLoaded(item);
@@ -27,22 +28,25 @@ namespace CosmicSpell {
         protected void Awake() {
             awake = true;
             item = GetComponent<Item>();
+            Debug.Log("Awake");
+            item.IgnoreRagdollCollision(Player.currentCreature.ragdoll);
         }
 
-        protected void Start() => item.definition.collisionHandlers[0].OnCollisionStartEvent += new CollisionHandler.CollisionEvent(this.OnCollision);
+        protected void Start() => item.collisionHandlers[0].OnCollisionStartEvent += new CollisionHandler.CollisionEvent(this.OnCollision);
 
         protected void OnCollision(ref CollisionStruct collisionInstance) {
             if (active) {
-                var colliderId = collisionInstance.targetColliderGroup?.collisionHandler?.item?.definition?.itemId;
+                var colliderId = collisionInstance.targetColliderGroup?.collisionHandler?.item?.itemId;
                 var colliderCreature = collisionInstance.targetColliderGroup?.collisionHandler?.ragdollPart?.ragdoll?.creature;
                 if (colliderId != null && colliderId.Equals("DynamicProjectile")
-                    || colliderCreature != null && colliderCreature.Equals(Creature.player))
+                    || colliderCreature != null && colliderCreature.Equals(Player.currentCreature))
                     return;
                 if (mergeSpell == null)
                     return;
+                CollisionStruct collisionInstanceCopy = collisionInstance;
                 for (int i = 0; i < numFireballs; i++) {
-                    Item fireball = mergeSpell.fireballItem.Spawn();
-                    fireball.transform.position = collisionInstance.contactPoint + collisionInstance.contactNormal / 2.0f + new Vector3(
+                    mergeSpell.fireballItem.SpawnAsync(fireball => {
+                    fireball.transform.position = collisionInstanceCopy.contactPoint + collisionInstanceCopy.contactNormal / 2.0f + new Vector3(
                         UnityEngine.Random.Range(-0.5f, 0.5f),
                         UnityEngine.Random.Range(-0.5f, 0.5f),
                         UnityEngine.Random.Range(-0.5f, 0.5f));
@@ -50,7 +54,8 @@ namespace CosmicSpell {
                     mergeSpell.ThrowFireball(fireball, Quaternion.Euler(
                         UnityEngine.Random.Range(-20.0f, 20.0f),
                         UnityEngine.Random.Range(-20.0f, 20.0f),
-                        UnityEngine.Random.Range(-20.0f, 20.0f)) * collisionInstance.contactNormal * 3.0f);
+                        UnityEngine.Random.Range(-20.0f, 20.0f)) * collisionInstanceCopy.contactNormal * -3.0f);
+                    });
                 }
                 Despawn();
             }
@@ -59,13 +64,13 @@ namespace CosmicSpell {
         protected void Update() {
             if (awake && item != null && Time.time - lastFireballFired > fireballDelay) {
                 lastFireballFired = Time.time;
-                Creature.player.StartCoroutine(mergeSpell.SpawnFireball(transform, item.GetComponentsInChildren<Collider>()));
+                mergeSpell.SpawnFireball(transform, item.GetComponentsInChildren<Collider>());
             }
         }
 
         public void Despawn() {
             this.item.rb.isKinematic = false;
-            foreach (ColliderGroup colliderGroup in this.item.definition.colliderGroups) {
+            foreach (ColliderGroup colliderGroup in item.colliderGroups) {
                 foreach (Collider collider in colliderGroup.colliders)
                     collider.enabled = true;
             }

@@ -9,6 +9,7 @@ using System.Collections;
 using System.Reflection;
 
 namespace CosmicSpell {
+    using Utils.ExtensionMethods;
     class CosmicFireMerge : SpellMergeData {
         private ItemPhysic sunData;
         private Item sunInstance;
@@ -22,11 +23,10 @@ namespace CosmicSpell {
         public float sunFireballDelay = 1.0f;
         public float throwVelocity = 5.0f;
         public float fireballSpeed = 50.0f;
-        public float fireballChargeSpeed = 2.0f;
+        public float fireballDelay = 2.0f;
 
-        public override void OnCatalogRefresh() {
-            base.OnCatalogRefresh();
-            AssetBundle assetBundle = AssetBundle.GetAllLoadedAssetBundles().Where(bundle => bundle.name.Contains("blackholespell")).First();
+        public override void Load(Mana mana) {
+            base.Load(mana);
             sunData = Catalog.GetData<ItemPhysic>("CosmicSun");
             fireballItem = Catalog.GetData<ItemPhysic>("DynamicProjectile");
             fireballEffect = Catalog.GetData<EffectData>("SpellFireball");
@@ -39,13 +39,15 @@ namespace CosmicSpell {
             if (active) {
                 if (!isActive) {
                     isActive = true;
-                    sunInstance = sunData.Spawn();
-                    sunInstance.transform.position = Creature.player.mana.mergePoint.transform.position;
-                    sunInstance.transform.rotation = Creature.player.mana.mergePoint.transform.rotation;
-                    sunInstance.rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
-                    sunInstance.rb.isKinematic = true;
-                    SunController control = sunInstance.GetComponent<SunController>();
-                    control.mergeSpell = this;
+                    sunData.SpawnAsync(sun => {
+                        sunInstance = sun;
+                        sunInstance.transform.position = Player.currentCreature.mana.mergePoint.transform.position;
+                        sunInstance.transform.rotation = Player.currentCreature.mana.mergePoint.transform.rotation;
+                        sunInstance.rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+                        sunInstance.rb.isKinematic = true;
+                        SunController control = sunInstance.GetComponent<SunController>();
+                        control.mergeSpell = this;
+                    });
                 }
             } else {
                 isActive = false;
@@ -76,7 +78,7 @@ namespace CosmicSpell {
             var nearestCreatures = Creature.list
                     .Where(x => !x.faction.name.Equals("Player") && x.state != Creature.State.Dead);
             if (nearestCreatures.Count() == 0) {
-                return item.transform.position + item.transform.position - Creature.player.animator.GetBoneTransform(HumanBodyBones.Chest).transform.position;
+                return item.transform.position + item.transform.position - Player.currentCreature.animator.GetBoneTransform(HumanBodyBones.Chest).transform.position;
             } else {
                 return nearestCreatures
                     .Aggregate((a, x) => Vector3.Distance(a.transform.position, item.transform.position) < Vector3.Distance(x.transform.position, item.transform.position) ? a : x)
@@ -86,8 +88,8 @@ namespace CosmicSpell {
 
         public override void Update() {
             base.Update();
-            Transform mergePoint = Creature.player.mana.mergePoint.transform;
-            if (isActive) {
+            Transform mergePoint = Player.currentCreature.mana.mergePoint.transform;
+            if (isActive && sunInstance != null) {
                 sunInstance.transform.position = Vector3.Lerp(
                     sunInstance.transform.position,
                     mergePoint.position,
@@ -101,21 +103,21 @@ namespace CosmicSpell {
             fireball.rb.isKinematic = false;
 
             // The following is lightly modified from the game's own fireball spawn functionality. All credit to KospY.
-            foreach (CollisionHandler collisionHandler in fireball.definition.collisionHandlers) {
+            foreach (CollisionHandler collisionHandler in fireball.collisionHandlers) {
                 collisionHandler.SetPhysicModifier(this, 0, 0.0f);
                 foreach (Damager damager in collisionHandler.damagers)
-                    damager.Load(fireballDamager);
+                    damager.Load(fireballDamager, collisionHandler);
             }
             ItemMagicProjectile component = fireball.GetComponent<ItemMagicProjectile>();
             if ((bool)(UnityEngine.Object)component) {
                 component.guided = false;
                 component.speed = fireballSpeed;
-                component.item.lastHandler = Creature.player.body.handRight.interactor;
+                component.item.lastHandler = Player.currentCreature.handRight;
                 component.allowDeflect = true;
                 component.deflectEffectData = fireballDeflectEffect;
                 component.imbueBladeEnergyTransfered = 50.0f;
-                component.imbueSpellCastCharge = (SpellCastCharge)Creature.player.mana.spells.Find(spell => spell.id == "Fire");
-                component.Fire(velocity, fireballEffect, Creature.player.body.handRight.playerHand?.itemHand?.item, Creature.player.ragdoll);
+                component.imbueSpellCastCharge = (SpellCastCharge)Player.currentCreature.mana.spells.Find(spell => spell.id == "Fire");
+                component.Fire(velocity, fireballEffect, shooterRagdoll: Player.currentCreature.ragdoll);
             } else {
                 fireball.rb.AddForce(velocity, ForceMode.Impulse);
                 fireball.Throw(flyDetection: Item.FlyDetection.Forced);
@@ -126,49 +128,38 @@ namespace CosmicSpell {
             ThrowFireball(fireball, (GetClosestCreatureHead(fireball) - fireball.transform.position).normalized * 30.0f);
         }
 
-        public IEnumerator SpawnFireball(Transform sun, Vector3 velocity) {
+        public void SpawnFireball(Transform sun, Vector3 velocity) {
             var offset = Quaternion.Euler(
                 UnityEngine.Random.value * 360.0f,
                 UnityEngine.Random.value * 360.0f,
                 UnityEngine.Random.value * 360.0f) * Vector3.forward * 0.2f;
-            Item fireball = fireballItem.Spawn();
-            fireball.transform.position = sun.position + offset;
-            fireball.transform.localScale = Vector3.zero;
-            fireball.rb.isKinematic = true;
-            ThrowFireball(fireball, velocity);
-            yield break;
+            fireballItem.SpawnAsync(fireball => {
+                fireball.transform.position = sun.position + offset;
+                fireball.transform.localScale = Vector3.zero;
+                fireball.rb.isKinematic = true;
+                ThrowFireball(fireball, velocity);
+            });
         }
 
-        public IEnumerator SpawnFireball(Transform sun, Collider[] ignoredColliders) {
+        public void SpawnFireball(Transform sun, Collider[] ignoredColliders) {
             // does it show that I didn't google how to do C# default args...
             float chargeTime = 0;
             var offset = Quaternion.Euler(
                 UnityEngine.Random.value * 360.0f,
                 UnityEngine.Random.value * 360.0f,
                 UnityEngine.Random.value * 360.0f) * Vector3.forward * 0.2f;
-            Item fireball = fireballItem.Spawn();
-            fireball.transform.position = sun.position + offset;
-            fireball.transform.localScale = Vector3.zero;
-            fireball.rb.isKinematic = true;
-            foreach (Collider collider in ignoredColliders) {
-                foreach (Collider fireballCollider in fireball.GetComponentsInChildren<Collider>()) {
-                    Physics.IgnoreCollision(collider, fireballCollider);
+            fireballItem.SpawnAsync(fireball => {
+                fireball.transform.position = sun.position + offset;
+                fireball.transform.localScale = Vector3.one;
+                fireball.rb.isKinematic = true;
+                foreach (Collider collider in ignoredColliders) {
+                    foreach (Collider fireballCollider in fireball.GetComponentsInChildren<Collider>()) {
+                        Physics.IgnoreCollision(collider, fireballCollider);
+                    }
                 }
-            }
-            while (true) {
-                if (chargeTime < 1 && sun != null) {
-                    chargeTime += Time.deltaTime / fireballChargeSpeed;
-                    fireball.transform.localScale = Vector3.one * chargeTime;
-                    fireball.transform.position = Vector3.Lerp(
-                        fireball.transform.position,
-                        sun.position + offset,
-                        Time.deltaTime * 10.0f);
-                    yield return new WaitForFixedUpdate();
-                } else {
-                    ThrowFireballAtClosestEnemy(fireball);
-                    yield break;
-                }
-            }
+                Task.Delay((int)fireballDelay).Wait();
+                ThrowFireballAtClosestEnemy(fireball);
+            });
         }
     }
 }

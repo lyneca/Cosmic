@@ -36,6 +36,7 @@
     <Compile Include="CosmicSelfMerge.cs" />
     <Compile Include="CosmicSpellCharge.cs" />
     <Compile Include="CosmicFireMerge.cs" />
+    <Compile Include="PID.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Properties\Settings.Designer.cs">
       <AutoGen>True</AutoGen>
@@ -43,6 +44,7 @@
       <DependentUpon>Settings.settings</DependentUpon>
     </Compile>
     <Compile Include="SunController.cs" />
+    <Compile Include="Utils.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="0Harmony">
@@ -52,7 +54,18 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Blade &amp; Sorcery\BladeAndSorcery_Data\Managed\Assembly-CSharp.dll</HintPath>
     </Reference>
+    <Reference Include="chabuk.manikinmono, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null" />
+    <Reference Include="IngameDebugConsole.Runtime, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Blade &amp; Sorcery\BladeAndSorcery_Data\Managed\IngameDebugConsole.Runtime.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
+    <Reference Include="Unity.Addressables">
+      <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Blade &amp; Sorcery\BladeAndSorcery_Data\Managed\Unity.Addressables.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.ResourceManager">
+      <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Blade &amp; Sorcery\BladeAndSorcery_Data\Managed\Unity.ResourceManager.dll</HintPath>
+    </Reference>
     <Reference Include="UnityEngine, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Blade &amp; Sorcery\BladeAndSorcery_Data\Managed\UnityEngine.dll</HintPath>
@@ -85,6 +98,7 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Blade &amp; Sorcery\BladeAndSorcery_Data\Managed\UnityEngine.TextRenderingModule.dll</HintPath>
     </Reference>
+    <Reference Include="UnityEngine.VFXModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />
@@ -95,6 +109,7 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>copy /Y $(TargetPath) "C:\Program Files (x86)\Steam\steamapps\common\Blade &amp; Sorcery\BladeAndSorcery_Data\StreamingAssets\CosmicSpell"</PostBuildEvent>
+    <PostBuildEvent>copy /Y $(TargetPath) "C:\Program Files (x86)\Steam\steamapps\common\Blade &amp; Sorcery\BladeAndSorcery_Data\StreamingAssets\Mods\Cosmic"
+copy /Y $(TargetPath) "C:\Users\atrag\code\BasSDK\BuildStaging\Catalog\Cosmic"</PostBuildEvent>
   </PropertyGroup>
 </Project>

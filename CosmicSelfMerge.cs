@@ -7,18 +7,9 @@ using UnityEngine;
 using ThunderRoad;
 using HarmonyLib;
 
-namespace ExtensionMethods {
-    public static class GameObjectExtensions {
-        public static T GetOrAddComponent<T>(this GameObject obj) where T : Component {
-            return obj.GetComponent<T>() ?? obj.AddComponent<T>();
-        }
-    }
-}
-
 
 namespace CosmicSpell {
-    using ExtensionMethods;
-    using System.Collections;
+    using Utils.ExtensionMethods;
 
     using static CosmicSpell.HoleType;
 
@@ -43,30 +34,57 @@ namespace CosmicSpell {
         bool whiteGrabbed;
         bool blackGrabbed;
 
+        public static void PointItemFlyRefAtTarget(Item item, Vector3 target, float lerpFactor) {
+            if (item == null || item?.flyDirRef == null)
+                return;
+            item.transform.rotation = Quaternion.Slerp(
+                item.transform.rotation * item.flyDirRef.localRotation,
+                Quaternion.LookRotation(target),
+                lerpFactor) * Quaternion.Inverse(item.flyDirRef.localRotation);
+        }
 
-        public override void OnCatalogRefresh() {
-            base.OnCatalogRefresh();
+
+        public static bool ShouldAffectRigidbody(Rigidbody rb) {
+            if (rb == null)
+                return false;
+            try {
+                bool rigidbodyConditions = (rb.gameObject.layer != GameManager.GetLayer(LayerName.NPC))
+                    && !rb.isKinematic;
+                Item item = rb.gameObject.GetComponent<Item>();
+                bool itemConditions = item != null && (!item.isTelekinesisGrabbed
+                    && item.handlers.Count == 0
+                    && !item.isGripped
+                    && item.itemId != "BlackHoleSphere"
+                    && item.itemId != "WhiteHoleSphere"
+                );
+                RagdollPart ragdoll = rb.gameObject.GetComponent<RagdollPart>();
+                bool ragdollConditions = ragdoll == null;
+                return rigidbodyConditions && itemConditions && ragdollConditions;
+            } catch (NullReferenceException e) {
+                Debug.LogError(e.Data);
+                return false;
+            }
+        }
+
+
+        public override void Load(Mana mana) {
+            base.Load(mana);
             blackHoleData = Catalog.GetData<ItemPhysic>("CosmicBlackHole");
             whiteHoleData = Catalog.GetData<ItemPhysic>("CosmicWhiteHole");
         }
 
-        public Item GetOrFindOrCreateHole(HoleType type) {
-            Item instance = null;
-            switch (type) {
-                case Black:
-                    instance = blackHoleInstance
-                        ?? Item.list.Find(item => item.definition.itemId == "CosmicBlackHole")
-                        ?? blackHoleData.Spawn();
-                    break;
-                case White:
-                    instance = whiteHoleInstance
-                        ?? Item.list.Find(item => item.definition.itemId == "CosmicWhiteHole")
-                        ?? whiteHoleData.Spawn();
-                    break;
-            }
-            instance?.gameObject.GetOrAddComponent<HoleSphereBehaviour>().Detach();
-            return instance;
+        public override void Unload() {
+            base.Unload();
         }
+
+        public Item GetOrFindHole(HoleType type) {
+            if (type == Black) {
+                return blackHoleInstance ?? Item.list.Find(item => item.itemId == "BlackHoleSphere");
+            } else {
+                return whiteHoleInstance ?? Item.list.Find(item => item.itemId == "WhiteHoleSphere");
+            }
+        }
+        //instance.gameObject.GetOrAddComponent<HoleSphereBehaviour>().Detach();
 
         public override void Merge(bool active) {
             base.Merge(active);
@@ -75,19 +93,26 @@ namespace CosmicSpell {
                     isActive = true;
 
                     blackGrabbed = false;
-                    blackHoleInstance = GetOrFindOrCreateHole(Black);
-                    blackHoleInstance.disallowDespawn = true;
-                    blackHoleInstance.transform.localScale = Vector3.one * 0.3f;
-                    blackHoleInstance.transform.position = Creature.player.mana.mergePoint.position;
-
                     whiteGrabbed = false;
-                    whiteHoleInstance = GetOrFindOrCreateHole(White);
-                    whiteHoleInstance.disallowDespawn = true;
-                    whiteHoleInstance.transform.localScale = Vector3.one * 0.3f;
-                    whiteHoleInstance.transform.position = Creature.player.mana.mergePoint.position;
 
-                    blackHoleInstance.gameObject.GetOrAddComponent<HoleSphereBehaviour>().Begin(Black, whiteHoleInstance, this);
-                    whiteHoleInstance.gameObject.GetOrAddComponent<HoleSphereBehaviour>().Begin(White, blackHoleInstance, this);
+                    GetOrFindHole(Black)?.GetComponent<HoleSphereBehaviour>()?.Despawn();
+                    GetOrFindHole(White)?.GetComponent<HoleSphereBehaviour>()?.Despawn();
+
+                    whiteHoleData.SpawnAsync(instance => {
+                        whiteHoleInstance = instance;
+                        whiteHoleInstance.disallowDespawn = true;
+                        whiteHoleInstance.transform.localScale = Vector3.one * 0.3f;
+                        whiteHoleInstance.transform.position = Player.currentCreature.mana.mergePoint.position;
+                        whiteHoleInstance.gameObject.GetOrAddComponent<HoleSphereBehaviour>().Begin(White, ref blackHoleInstance, this);
+                    });
+
+                    blackHoleData.SpawnAsync(instance => {
+                        blackHoleInstance = instance;
+                        blackHoleInstance.disallowDespawn = true;
+                        blackHoleInstance.transform.localScale = Vector3.one * 0.3f;
+                        blackHoleInstance.transform.position = Player.currentCreature.mana.mergePoint.position;
+                        blackHoleInstance.gameObject.GetOrAddComponent<HoleSphereBehaviour>().Begin(Black, ref whiteHoleInstance, this);
+                    });
                 }
             } else {
                 isActive = false;
@@ -98,35 +123,40 @@ namespace CosmicSpell {
                     blackHoleInstance = null;
                     whiteHoleInstance.GetComponent<HoleSphereBehaviour>().Despawn();
                     whiteHoleInstance = null;
+                } else {
+                    whiteHoleInstance.GetComponent<HoleSphereBehaviour>().active = true;
+                    blackHoleInstance.GetComponent<HoleSphereBehaviour>().active = true;
                 }
             }
         }
 
         public void GrabItem(SpellCaster caster, Item item) {
-            caster?.telekinesis?.StartTargeting(item.GetMainHandle(caster.bodyHand.side));
+            caster?.telekinesis?.StartTargeting(item.GetMainHandle(caster.ragdollHand.side));
             caster?.telekinesis?.TryCatch();
         }
 
         public override void Update() {
             base.Update();
-            if (isActive) {
+            if (isActive && whiteHoleInstance && blackHoleInstance) {
                 if (PlayerControl.handLeft.gripPressed && !whiteGrabbed && currentCharge == 1) {
                     whiteGrabbed = true;
-                    GrabItem(Creature.player.mana.casterLeft, whiteHoleInstance);
+                    GrabItem(Player.currentCreature.mana.casterLeft, whiteHoleInstance);
+                    whiteHoleInstance.GetComponent<HoleSphereBehaviour>().active = true;
                 }
                 if (PlayerControl.handRight.gripPressed && !blackGrabbed && currentCharge == 1) {
                     blackGrabbed = true;
-                    GrabItem(Creature.player.mana.casterRight, blackHoleInstance);
+                    GrabItem(Player.currentCreature.mana.casterRight, blackHoleInstance);
+                    blackHoleInstance.GetComponent<HoleSphereBehaviour>().active = true;
                 }
                 if (!blackGrabbed)
                     blackHoleInstance.transform.position = Vector3.Lerp(
                         blackHoleInstance.transform.position,
-                        Creature.player.mana.mergePoint.position + (whiteGrabbed ? new Vector3(0, 0, 0) : new Vector3(0, 0.3f, 0)),
+                        Player.currentCreature.mana.mergePoint.position + (whiteGrabbed ? new Vector3(0, 0, 0) : new Vector3(0, 0.3f, 0)),
                         Time.deltaTime * 10.0f);
                 if (!whiteGrabbed)
                     whiteHoleInstance.transform.position = Vector3.Lerp(
                         whiteHoleInstance.transform.position,
-                        Creature.player.mana.mergePoint.position + (blackGrabbed ? new Vector3(0, 0, 0) : new Vector3(0, -0.3f, 0)),
+                        Player.currentCreature.mana.mergePoint.position + (blackGrabbed ? new Vector3(0, 0, 0) : new Vector3(0, -0.3f, 0)),
                         Time.deltaTime * 10.0f);
                 whiteHoleInstance.transform.localScale = Vector3.one * currentCharge * 0.3f;
                 blackHoleInstance.transform.localScale = Vector3.one * currentCharge * 0.3f;
@@ -141,7 +171,7 @@ namespace CosmicSpell {
 
     class HoleSphereBehaviour : MonoBehaviour {
         private Item item;
-        private bool active;
+        public bool active;
         private bool isHeld;
         private bool isStored;
         private bool hasFired;
@@ -149,10 +179,12 @@ namespace CosmicSpell {
         private bool wasHeld;
         private float lastHeldTime;
         private float itemSpamDelay = 1.0f;
-
+        private float lastThrownItem = 0.0f;
+        private float itemThrowDelay = 0.1f;
         private float friction = 0.95f;
         private float throwTrackRange = 10.0f;
-        private float throwTrackForce = 60.0f;
+        private float throwTrackForce = 100.0f;
+        // private float throwTrackForce = 60.0f;
         private float throwForce = 30.0f;
 
         private float pushForce = 30.0f;
@@ -166,30 +198,7 @@ namespace CosmicSpell {
         Item otherHole;
         Queue<GameObject> storedItems = new Queue<GameObject>();
 
-
-        public bool ShouldAffectRigidbody(Rigidbody rb) {
-            if (rb == null)
-                return false;
-            try {
-                bool rigidbodyConditions = (rb.gameObject.layer != GameManager.GetLayer(LayerName.NPC))
-                    && !rb.isKinematic;
-                Item item = rb.gameObject.GetComponent<Item>();
-                bool itemConditions = item != null && (!item.isTelekinesisGrabbed
-                    && item.handlers.Count == 0
-                    && !item.isGripped
-                    && item.definition.itemId != "CosmicWhiteHole"
-                    && item.definition.itemId != "CosmicBlackHole"
-                );
-                RagdollPart ragdoll = rb.gameObject.GetComponent<RagdollPart>();
-                bool ragdollConditions = ragdoll == null;
-                return rigidbodyConditions && itemConditions && ragdollConditions;
-            } catch (NullReferenceException e) {
-                Debug.LogError(e.Data);
-                return false;
-            }
-        }
-
-        public void Begin(HoleType type, Item otherHole, CosmicSelfMerge spellData) {
+        public void Begin(HoleType type, ref Item otherHole, CosmicSelfMerge spellData) {
             nomEffect = nomEffect ?? Catalog.GetData<EffectData>("HoleAbsorb");
             pewEffect = pewEffect ?? Catalog.GetData<EffectData>("HoleFire");
             ambientEffect = ambientEffect ?? Catalog.GetData<EffectData>((type == Black) ? "BlackHoleAmbient" : "WhiteHoleAmbient");
@@ -209,7 +218,6 @@ namespace CosmicSpell {
             effect = ambientEffect.Spawn(transform);
             effect.Play();
             this.type = type;
-            active = true;
         }
 
         public void Detach() {
@@ -219,11 +227,11 @@ namespace CosmicSpell {
             item?.handlers.ForEach(handler => handler.TryRelease());
         }
 
-        public void DestroyOtherFakeNormieHoles() {
+        public void DestroyOldHoles() {
             foreach (Item otherItem in new List<Item>(Item.list).Where(
-                i => i.definition.itemId == "CosmicWhiteHole"
-                  || i.definition.itemId == "CosmicBlackHole").ToList()) {
-                if (otherItem.GetComponent<HoleSphereBehaviour>() == null) {
+                i => i.itemId == "BlackHoleSphere"
+                  || i.itemId == "WhiteHoleSphere").ToList()) {
+                if (otherItem && otherHole && !ReferenceEquals(otherItem.gameObject, otherHole.gameObject) && !ReferenceEquals(otherItem.gameObject, gameObject)) {
                     otherItem.holder?.UnSnap(otherItem, true);
                     otherItem.GetMainHandle(Side.Left).handlers.ToList().ForEach(handler => handler.TryRelease());
                     otherItem.GetMainHandle(Side.Right).handlers.ToList().ForEach(handler => handler.TryRelease());
@@ -240,7 +248,10 @@ namespace CosmicSpell {
             item.rb.useGravity = false;
             item.rb.velocity *= friction;
 
-            DestroyOtherFakeNormieHoles();
+            if (Item.list.Where(
+                i => i.itemId == "BlackHoleSphere"
+                  || i.itemId == "WhiteHoleSphere").Count() > 2)
+                DestroyOldHoles();
 
             if (!active)
                 return;
@@ -280,7 +291,8 @@ namespace CosmicSpell {
                 PushOrSucc();
                 hasFired = false;
             }
-            if (!isStored && !isHeld && storedItems.Count > 0 && type == White && Time.time - lastHeldTime > itemSpamDelay) {
+            if (!isStored && !isHeld && storedItems.Count > 0 && type == White && Time.time - lastHeldTime > itemSpamDelay && Time.time - lastThrownItem > itemThrowDelay) {
+                lastThrownItem = Time.time;
                 GameObject storedObject = storedItems.Dequeue();
                 storedObject.SetActive(true);
                 TriggerHeadThrow(storedObject.GetComponent<Rigidbody>());
@@ -290,10 +302,12 @@ namespace CosmicSpell {
         public void PushOrSucc() { PushOrSucc(1); }
 
         public void PushOrSucc(float amount) {
+            if (!otherHole)
+                return;
             var otherComponent = otherHole.GetComponent<HoleSphereBehaviour>();
             lock (otherComponent.storedItems) {
                 foreach (Collider collider in Physics.OverlapSphere(item.transform.position, 0.1f, 218119169)) {
-                    if (type == Black && otherHole != null && collider && ShouldAffectRigidbody(collider.attachedRigidbody)) {
+                    if (type == Black && otherHole != null && collider && CosmicSelfMerge.ShouldAffectRigidbody(collider.attachedRigidbody)) {
                         collider.attachedRigidbody.gameObject.GetComponent<Item>()?.handlers.ForEach(handler => handler.TryRelease());
                         otherComponent.storedItems.Enqueue(collider.attachedRigidbody.gameObject);
                         nomEffect.Spawn(item.transform).Play();
@@ -302,37 +316,34 @@ namespace CosmicSpell {
                 }
             }
             foreach (Collider collider in Physics.OverlapSphere(item.transform.position, 10.0f, 218119169)) {
-                if (ShouldAffectRigidbody(collider.attachedRigidbody))
+                if (CosmicSelfMerge.ShouldAffectRigidbody(collider.attachedRigidbody))
                     AddForce(collider.attachedRigidbody, amount);
             }
-        }
-
-        private void PointItemFlyRefAtTarget(Item item, Vector3 target, float lerpFactor) {
-            if (item == null || item.definition?.flyDirRef == null)
-                return;
-            item.transform.rotation = Quaternion.Slerp(
-                item.transform.rotation * item.definition.flyDirRef.localRotation,
-                Quaternion.LookRotation(target),
-                lerpFactor) * Quaternion.Inverse(item.definition.flyDirRef.localRotation);
         }
 
         public void TriggerHeadThrow(Rigidbody rb) {
             rb.gameObject.transform.position = item.transform.position;
             List<Creature> creatures = Creature.list.Where(
-                creature => creature != Creature.player
-                         && creature.state == Creature.State.Alive
-                         && (creature.body.headBone.position - item.transform.position).magnitude < throwTrackRange).ToList();
-            pewEffect.Spawn(item.transform).Play();
-            rb.gameObject.GetComponent<Item>()?.Throw();
-
+                creature => creature != Player.currentCreature
+                         && creature.state != Creature.State.Dead
+                         && (creature.ragdoll.headPart.transform.position - item.transform.position).magnitude < throwTrackRange).ToList();
             if (creatures.Count > 0) {
                 Creature target = creatures[new System.Random().Next(creatures.Count)];
-                rb.position = (target.body.headBone.position - item.transform.position).normalized * 0.2f;
+                Debug.Log($"Throwing at {target.name}");
+                rb.position = (target.ragdoll.headPart.transform.position - item.transform.position).normalized * 0.2f;
                 rb.velocity = Vector3.zero;
-                rb.AddForce((target.body.headBone.position - item.transform.position).normalized * item.rb.mass / 2.0f * throwTrackForce, ForceMode.Impulse);
-                PointItemFlyRefAtTarget(rb.gameObject.GetComponent<Item>(), (target.body.headBone.position - item.transform.position).normalized, 1);
-                rb.gameObject.GetComponent<Item>()?.Throw();
+                float modifier = 1;
+                if (rb.mass < 1) {
+                    modifier *= rb.mass * 2;
+                } else {
+                    modifier *= rb.mass;
+                }
+                rb.AddForce((target.ragdoll.headPart.transform.position - item.transform.position).normalized * modifier * throwTrackForce, ForceMode.Impulse);
+                if (rb.gameObject.GetComponent<Item>().data.type != ItemPhysic.Type.Prop)
+                    CosmicSelfMerge.PointItemFlyRefAtTarget(rb.gameObject.GetComponent<Item>(), (target.ragdoll.headPart.transform.position - item.transform.position).normalized, 1);
             }
+            pewEffect.Spawn(item.transform).Play();
+            rb.gameObject.GetComponent<Item>()?.Throw();
         }
 
         public void FireObject() {
@@ -342,14 +353,13 @@ namespace CosmicSpell {
                 GameObject storedObject = storedItems.Dequeue();
                 try {
                     storedObject.transform.position = item.transform.position
-                        + (item.mainHandler.bodyHand.side == Side.Right ? 1 : -1)
-                        * item.mainHandler.bodyHand.transform.right * 0.3f;
+                        + item.mainHandler.transform.right * -0.3f;
                     storedObject.SetActive(true);
                     if (storedObject.GetComponent<Rigidbody>()) {
                         var rigidbody = storedObject.GetComponent<Rigidbody>();
                         rigidbody.velocity = Vector3.zero;
                         rigidbody.AddForce(
-                            (storedObject.transform.position - item.mainHandler.bodyHand.transform.position).normalized
+                            (storedObject.transform.position - item.mainHandler.transform.position).normalized
                             * rigidbody.mass
                             * throwForce, ForceMode.Impulse);
                     }
